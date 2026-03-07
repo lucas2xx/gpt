@@ -859,12 +859,16 @@
 ═══════════════════════════════════════════════════════════════ */
 const CONFIG = {
   apiKey: 'AQEre657fEzh_Sq_sZZKH5MgIvS83YGQ',
-  smaPeriod: 10,
-  rocPeriod: 10,
-  trailLength: 3,
-  lookbackDays: 400,       // calendar days fetched from API (~280 trading days)
+  trailLength: 6,
+  lookbackDays: 2200,      // ~6 years of calendar days
   refreshMs: 5 * 60 * 1000,
   cacheTTL: 4 * 60 * 1000,
+};
+
+// Per-timeframe calculation parameters
+const TF_CONFIG = {
+  weekly:  { span: 'week',  smaPeriod: 5,  rocPeriod: 10, label: 'Weekly'  },
+  monthly: { span: 'month', smaPeriod: 3,  rocPeriod: 12, label: 'Monthly' },
 };
 
 // Default sector definitions with muted, distinctive colors
@@ -892,12 +896,12 @@ const EXTRA_COLORS = [
    STATE
 ═══════════════════════════════════════════════════════════════ */
 const STATE = {
-  timeframe: 'daily',
+  timeframe: 'weekly',
   benchmark: 'SPY',
   sectors: [],          // loaded from prefs or defaults
-  cache: {},            // { daily: {data, ts}, weekly: {data, ts} }
-  dailyRRG: [],         // [{sector, trail}]
-  weeklyRRG: [],
+  cache: {},            // { weekly: {data, ts}, monthly: {data, ts} }
+  weeklyRRG: [],        // [{sector, trail}]
+  monthlyRRG: [],
   mutedTickers: new Set(),
   chartInst: null,
   refreshTimer: null,
@@ -919,7 +923,9 @@ function savePrefs() {
 function loadPrefs() {
   try {
     const p = JSON.parse(localStorage.getItem('rrg_prefs') || '{}');
-    STATE.timeframe = p.timeframe || 'daily';
+    // Migrate legacy 'daily' pref to 'weekly'
+    const savedTf = p.timeframe;
+    STATE.timeframe = (savedTf === 'weekly' || savedTf === 'monthly') ? savedTf : 'weekly';
     STATE.benchmark = p.benchmark || 'SPY';
     STATE.sectors   = (p.sectors && p.sectors.length > 0) ? p.sectors : [...DEFAULT_SECTORS];
   } catch (e) {
@@ -1029,7 +1035,7 @@ async function fetchBars(ticker, timeframe) {
   const from = new Date();
   from.setDate(from.getDate() - CONFIG.lookbackDays);
 
-  const span = timeframe === 'weekly' ? 'week' : 'day';
+  const span = TF_CONFIG[timeframe].span;  // 'week' or 'month'
   const url  = `https://api.polygon.io/v2/aggs/ticker/${ticker}/range/1/${span}/${dateStr(from)}/${dateStr(to)}?adjusted=true&sort=asc&limit=500&apiKey=${CONFIG.apiKey}`;
 
   try {
@@ -1079,30 +1085,30 @@ function alignSeries(sectorBars, benchBars) {
  * Returns array of {x: rsRatio, y: rsMomentum} trail points, oldest→newest.
  * Returns [] if insufficient data.
  */
-function calculateRRG(sectorBars, benchBars) {
+function calculateRRG(sectorBars, benchBars, tfCfg) {
+  const { smaPeriod, rocPeriod } = tfCfg;
   const aligned = alignSeries(sectorBars, benchBars);
   const n = aligned.length;
 
   // Minimum data required: smaPeriod + rocPeriod + smaPeriod + trailLength + buffer
-  const minRequired = CONFIG.smaPeriod * 3 + CONFIG.rocPeriod + 10;
+  const minRequired = smaPeriod * 3 + rocPeriod + 10;
   if (n < minRequired) return [];
 
   // Step 1: Raw RS ratio × 100
   const rsRaw = aligned.map(d => (d.sc / d.bc) * 100);
 
-  // Step 2: Smooth RS with SMA(10) → JdK RS line
-  const rsSmooth = sma(rsRaw, CONFIG.smaPeriod);
+  // Step 2: Smooth RS with SMA → JdK RS line
+  const rsSmooth = sma(rsRaw, smaPeriod);
 
-  // Step 3: JdK RS-Ratio = ROC of rsSmooth over 10 periods
-  //         Normalized to 100 center
-  const rsRatioRaw = roc(rsSmooth.map(v => v ?? 0), CONFIG.rocPeriod)
+  // Step 3: JdK RS-Ratio = ROC of rsSmooth over rocPeriod
+  const rsRatioRaw = roc(rsSmooth.map(v => v ?? 0), rocPeriod)
     .map((v, i) => rsSmooth[i] == null ? null : v);
 
-  // Step 4: Apply SMA(10) to RS-Ratio values to smooth it
+  // Step 4: Apply SMA to RS-Ratio values to smooth it
   const validRsRatio = rsRatioRaw.filter(v => v !== null);
-  if (validRsRatio.length < CONFIG.smaPeriod) return [];
+  if (validRsRatio.length < smaPeriod) return [];
 
-  const rsRatioSmoothed = sma(validRsRatio, CONFIG.smaPeriod);
+  const rsRatioSmoothed = sma(validRsRatio, smaPeriod);
 
   // Reconstruct full-length arrays preserving null positions
   const rsRatioFull = new Array(n).fill(null);
@@ -1114,15 +1120,15 @@ function calculateRRG(sectorBars, benchBars) {
     }
   });
 
-  // Step 5: RS-Momentum = ROC of rsRatioFull over 10 periods
-  const momRaw = roc(rsRatioFull.map(v => v ?? 0), CONFIG.rocPeriod)
+  // Step 5: RS-Momentum = ROC of rsRatioFull over rocPeriod
+  const momRaw = roc(rsRatioFull.map(v => v ?? 0), rocPeriod)
     .map((v, i) => rsRatioFull[i] == null ? null : v);
 
-  // Step 6: Smooth RS-Momentum with SMA(10)
+  // Step 6: Smooth RS-Momentum
   const validMom = momRaw.filter(v => v !== null);
-  if (validMom.length < CONFIG.smaPeriod) return [];
+  if (validMom.length < smaPeriod) return [];
 
-  const momSmoothed = sma(validMom, CONFIG.smaPeriod);
+  const momSmoothed = sma(validMom, smaPeriod);
 
   const momFull = new Array(n).fill(null);
   let mIdx = 0;
@@ -1141,17 +1147,18 @@ function calculateRRG(sectorBars, benchBars) {
     }
   }
 
-  return trail; // [{x,y}, {x,y}, {x,y}] oldest→newest
+  return trail; // [{x,y}, ...] oldest→newest
 }
 
 /**
  * Compute RRG data for all sectors against current benchmark.
  */
-function computeAllRRG(rawData) {
+function computeAllRRG(rawData, tf) {
   const benchBars = rawData[STATE.benchmark] || [];
+  const tfCfg = TF_CONFIG[tf];
   return STATE.sectors.map(sector => ({
     sector,
-    trail: calculateRRG(rawData[sector.ticker] || [], benchBars),
+    trail: calculateRRG(rawData[sector.ticker] || [], benchBars, tfCfg),
   }));
 }
 
@@ -1304,13 +1311,13 @@ const trailLinesPlugin = {
 
 /**
  * Build a Chart.js dataset for one sector.
- * trail = [{x, y}, ...] oldest→newest (up to 3 points)
+ * trail = [{x, y}, ...] oldest→newest (up to 6 points)
  */
 function buildDataset(sector, trail) {
   const n = trail.length;
-  // Point sizes: oldest=5, middle=9, newest=13
-  const sizes   = [5, 9, 13].slice(-n);
-  const alphas  = [0.25, 0.55, 1.0].slice(-n);
+  // Point sizes and opacities: oldest=faint/small → newest=solid/large
+  const sizes   = [3, 4, 5, 7, 9, 12].slice(-n);
+  const alphas  = [0.12, 0.22, 0.35, 0.50, 0.72, 1.0].slice(-n);
 
   return {
     label: sector.ticker,
