@@ -1,0 +1,1881 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sector Rotation · RRG Scanner</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <style>
+    /* ────────────────────────────────────────────────────────────
+       DESIGN TOKENS
+    ──────────────────────────────────────────────────────────── */
+    :root {
+      --bg-0:       #0c0c0f;
+      --bg-1:       #101014;
+      --bg-2:       #17171d;
+      --bg-3:       #1f1f27;
+      --border:     #26262f;
+      --border-dim: #1c1c23;
+      --text-pri:   #e2e2ea;
+      --text-sec:   #6b6b7e;
+      --text-ter:   #3e3e50;
+      --accent:     #3d7eff;
+      --accent-dim: rgba(61,126,255,0.12);
+      --green:      #3d8a6e;
+      --green-dim:  rgba(61,138,110,0.08);
+      --red:        #8a4040;
+      --red-dim:    rgba(138,64,64,0.07);
+      --amber:      #8a7030;
+      --amber-dim:  rgba(138,112,48,0.08);
+      --blue-dim:   rgba(74,127,165,0.08);
+      --radius:     6px;
+      --radius-lg:  10px;
+    }
+
+    /* ────────────────────────────────────────────────────────────
+       RESET & BASE
+    ──────────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      background: var(--bg-0);
+      color: var(--text-pri);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: 13px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ────────────────────────────────────────────────────────────
+       SCROLLBAR
+    ──────────────────────────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+    /* ────────────────────────────────────────────────────────────
+       APP SHELL
+    ──────────────────────────────────────────────────────────── */
+    #app {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ────────────────────────────────────────────────────────────
+       HEADER
+    ──────────────────────────────────────────────────────────── */
+    #header {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      padding: 0 20px;
+      height: 52px;
+      background: var(--bg-1);
+      border-bottom: 1px solid var(--border-dim);
+      position: relative;
+      z-index: 10;
+    }
+
+    #header-title {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    #header-title h1 {
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      color: var(--text-pri);
+    }
+
+    #header-title span {
+      font-size: 11px;
+      font-weight: 400;
+      color: var(--text-ter);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    #header-controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex: 1;
+    }
+
+    /* Timeframe tabs */
+    #tf-tabs {
+      display: flex;
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 2px;
+      gap: 2px;
+    }
+
+    .tf-btn {
+      padding: 4px 12px;
+      border: none;
+      border-radius: 4px;
+      background: transparent;
+      color: var(--text-sec);
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      letter-spacing: 0.01em;
+    }
+
+    .tf-btn:hover { color: var(--text-pri); }
+
+    .tf-btn.active {
+      background: var(--bg-3);
+      color: var(--text-pri);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    }
+
+    /* Benchmark selector */
+    #bench-wrap {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    #bench-wrap label {
+      font-size: 11px;
+      color: var(--text-ter);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      flex-shrink: 0;
+    }
+
+    #bench-select {
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text-pri);
+      font-family: inherit;
+      font-size: 12px;
+      padding: 4px 8px;
+      cursor: pointer;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    #bench-select:hover, #bench-select:focus { border-color: var(--accent); }
+
+    #bench-custom {
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text-pri);
+      font-family: inherit;
+      font-size: 12px;
+      padding: 4px 8px;
+      width: 72px;
+      outline: none;
+      text-transform: uppercase;
+      transition: border-color 0.15s;
+    }
+
+    #bench-custom:focus { border-color: var(--accent); }
+    #bench-custom::placeholder { color: var(--text-ter); }
+
+    /* Header right side */
+    #header-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-left: auto;
+    }
+
+    #status-bar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--text-sec);
+    }
+
+    #status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+      transition: background 0.3s;
+    }
+
+    #status-dot.closed { background: var(--text-ter); }
+    #status-dot.loading { background: var(--amber); animation: pulse 1s infinite; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    .icon-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text-sec);
+      cursor: pointer;
+      transition: all 0.15s;
+      flex-shrink: 0;
+    }
+
+    .icon-btn:hover { border-color: var(--text-sec); color: var(--text-pri); }
+    .icon-btn svg { width: 14px; height: 14px; }
+
+    /* ────────────────────────────────────────────────────────────
+       MAIN CONTENT
+    ──────────────────────────────────────────────────────────── */
+    #main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 310px;
+      overflow: hidden;
+    }
+
+    /* ────────────────────────────────────────────────────────────
+       CHART AREA
+    ──────────────────────────────────────────────────────────── */
+    #chart-area {
+      display: flex;
+      flex-direction: column;
+      padding: 16px;
+      overflow: hidden;
+      min-width: 0;
+    }
+
+    #rrg-wrap {
+      flex: 1;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: opacity 0.2s ease;
+    }
+
+    #rrg-wrap.fading { opacity: 0.25; }
+
+    #rrg-wrap canvas {
+      max-width: 100%;
+      max-height: 100%;
+    }
+
+    /* Error / empty state */
+    #chart-error {
+      display: none;
+      position: absolute;
+      inset: 0;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 8px;
+      color: var(--text-sec);
+      font-size: 13px;
+    }
+
+    #chart-error.visible { display: flex; }
+
+    /* Legend strip */
+    #legend {
+      flex-shrink: 0;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px 12px;
+      padding: 10px 0 0;
+      border-top: 1px solid var(--border-dim);
+      margin-top: 10px;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      cursor: pointer;
+      user-select: none;
+      opacity: 1;
+      transition: opacity 0.2s;
+    }
+
+    .legend-item.muted { opacity: 0.3; }
+
+    .legend-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .legend-label {
+      font-size: 11px;
+      color: var(--text-sec);
+      font-weight: 400;
+    }
+
+    /* ────────────────────────────────────────────────────────────
+       INTELLIGENCE PANEL
+    ──────────────────────────────────────────────────────────── */
+    #panel {
+      border-left: 1px solid var(--border-dim);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--bg-1);
+    }
+
+    .panel-section {
+      flex-shrink: 0;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border-dim);
+    }
+
+    .panel-section:last-child { border-bottom: none; }
+
+    .section-label {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-ter);
+      margin-bottom: 10px;
+    }
+
+    /* Quadrant summary */
+    #quadrant-groups {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+
+    .q-group {
+      background: var(--bg-2);
+      border: 1px solid var(--border-dim);
+      border-radius: var(--radius);
+      padding: 8px 10px;
+    }
+
+    .q-group-label {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      margin-bottom: 5px;
+    }
+
+    .q-group.leading   .q-group-label { color: #3d8a6e; }
+    .q-group.improving .q-group-label { color: #4a7fa5; }
+    .q-group.weakening .q-group-label { color: #9a5c3c; }
+    .q-group.lagging   .q-group-label { color: #7a4040; }
+
+    .q-group-tickers {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 3px;
+    }
+
+    .q-ticker {
+      font-size: 10px;
+      font-weight: 500;
+      padding: 2px 6px;
+      border-radius: 3px;
+      background: var(--bg-3);
+      color: var(--text-sec);
+    }
+
+    /* Alerts */
+    #alerts-list {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .alert-card {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: var(--radius);
+      background: var(--bg-2);
+      border: 1px solid var(--border-dim);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .alert-card .alert-icon {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      margin-top: 4px;
+      flex-shrink: 0;
+    }
+
+    .alert-card.bullish { border-color: rgba(61,138,110,0.25); }
+    .alert-card.bullish .alert-icon { background: #3d8a6e; }
+    .alert-card.bearish { border-color: rgba(138,64,64,0.25); }
+    .alert-card.bearish .alert-icon { background: #8a4040; }
+    .alert-card.neutral { border-color: var(--border-dim); }
+    .alert-card.neutral .alert-icon { background: var(--text-ter); }
+
+    .alert-text strong { color: var(--text-pri); font-weight: 500; }
+    .alert-text { color: var(--text-sec); }
+
+    .no-alerts {
+      font-size: 12px;
+      color: var(--text-ter);
+      text-align: center;
+      padding: 8px 0;
+    }
+
+    /* Sector table */
+    #sector-scroll {
+      flex: 1;
+      overflow-y: auto;
+    }
+
+    #sector-table-wrap {
+      padding: 0 16px 16px;
+    }
+
+    .s-label {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-ter);
+      padding: 14px 0 8px;
+    }
+
+    table.sector-tbl {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    table.sector-tbl th {
+      font-size: 10px;
+      font-weight: 500;
+      color: var(--text-ter);
+      text-align: left;
+      padding: 0 4px 6px;
+      border-bottom: 1px solid var(--border-dim);
+      white-space: nowrap;
+    }
+
+    table.sector-tbl th:not(:first-child) { text-align: center; }
+
+    table.sector-tbl td {
+      padding: 6px 4px;
+      border-bottom: 1px solid var(--border-dim);
+      font-size: 11px;
+      color: var(--text-sec);
+      vertical-align: middle;
+    }
+
+    table.sector-tbl tr:last-child td { border-bottom: none; }
+
+    .td-sector {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+
+    .td-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .td-ticker { font-weight: 500; color: var(--text-pri); }
+
+    .td-quad {
+      text-align: center;
+      font-size: 10px;
+      font-weight: 500;
+      padding: 2px 0;
+    }
+
+    .td-quad.leading   { color: #3d8a6e; }
+    .td-quad.improving { color: #4a7fa5; }
+    .td-quad.weakening { color: #b87040; }
+    .td-quad.lagging   { color: #8a4040; }
+
+    .td-center { text-align: center; }
+
+    .badge-align {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      font-size: 9px;
+      font-weight: 500;
+      padding: 2px 5px;
+      border-radius: 3px;
+    }
+
+    .badge-align.aligned   { background: rgba(61,138,110,0.15); color: #3d8a6e; }
+    .badge-align.diverged  { background: rgba(138,112,48,0.15); color: #b89040; }
+    .badge-align.unknown   { background: var(--bg-3); color: var(--text-ter); }
+
+    .badge-trend {
+      font-size: 11px;
+      line-height: 1;
+    }
+
+    .badge-reversal { color: #b87040; }
+    .badge-consistent { color: #4a7fa5; }
+
+    /* ────────────────────────────────────────────────────────────
+       MODAL
+    ──────────────────────────────────────────────────────────── */
+    #modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.65);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(4px);
+    }
+
+    #modal-overlay.visible { display: flex; }
+
+    #modal {
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      width: 420px;
+      max-width: calc(100vw - 32px);
+      padding: 24px;
+      box-shadow: 0 24px 64px rgba(0,0,0,0.5);
+    }
+
+    #modal h2 {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-pri);
+      margin-bottom: 6px;
+    }
+
+    #modal .modal-sub {
+      font-size: 12px;
+      color: var(--text-sec);
+      margin-bottom: 18px;
+    }
+
+    #ticker-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin-bottom: 14px;
+      min-height: 32px;
+    }
+
+    .ticker-tag {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      background: var(--bg-3);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 3px 8px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-pri);
+      cursor: default;
+    }
+
+    .ticker-tag .remove-btn {
+      background: none;
+      border: none;
+      color: var(--text-ter);
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      transition: color 0.15s;
+    }
+
+    .ticker-tag .remove-btn:hover { color: var(--red); }
+
+    #ticker-tag-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+    }
+
+    #add-ticker-row {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 18px;
+    }
+
+    #add-ticker-input {
+      flex: 1;
+      background: var(--bg-1);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text-pri);
+      font-family: inherit;
+      font-size: 13px;
+      padding: 7px 10px;
+      outline: none;
+      text-transform: uppercase;
+      transition: border-color 0.15s;
+    }
+
+    #add-ticker-input:focus { border-color: var(--accent); }
+    #add-ticker-input::placeholder { color: var(--text-ter); text-transform: none; }
+
+    .modal-btns {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .btn {
+      padding: 7px 16px;
+      border-radius: var(--radius);
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+      border: none;
+    }
+
+    .btn-ghost {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-sec);
+    }
+
+    .btn-ghost:hover { border-color: var(--text-sec); color: var(--text-pri); }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .btn-primary:hover { background: #5590ff; }
+
+    .btn-sm {
+      padding: 5px 12px;
+      font-size: 12px;
+    }
+
+    /* ────────────────────────────────────────────────────────────
+       RESPONSIVE
+    ──────────────────────────────────────────────────────────── */
+    @media (max-width: 900px) {
+      #main {
+        grid-template-columns: 1fr;
+        grid-template-rows: 1fr auto;
+      }
+
+      #panel {
+        border-left: none;
+        border-top: 1px solid var(--border-dim);
+        max-height: 40vh;
+        overflow-y: auto;
+      }
+
+      #header-title span { display: none; }
+    }
+
+    @media (max-width: 600px) {
+      #header { gap: 10px; padding: 0 12px; }
+      #bench-wrap label { display: none; }
+      #chart-area { padding: 10px; }
+    }
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ── HEADER ──────────────────────────────────────────────── -->
+  <header id="header">
+    <div id="header-title">
+      <h1>Sector Rotation</h1>
+      <span>RRG Scanner</span>
+    </div>
+
+    <div id="header-controls">
+      <!-- Timeframe Tabs -->
+      <div id="tf-tabs">
+        <button class="tf-btn active" data-tf="daily" onclick="switchTimeframe('daily')">Daily</button>
+        <button class="tf-btn" data-tf="weekly" onclick="switchTimeframe('weekly')">Weekly</button>
+      </div>
+
+      <!-- Benchmark Selector -->
+      <div id="bench-wrap">
+        <label>vs</label>
+        <select id="bench-select" onchange="onBenchChange(this.value)">
+          <option value="SPY">SPY</option>
+          <option value="QQQ">QQQ</option>
+          <option value="DIA">DIA</option>
+          <option value="custom">Custom…</option>
+        </select>
+        <input id="bench-custom" type="text" placeholder="Ticker" style="display:none"
+               maxlength="8" onblur="onCustomBench()" onkeydown="if(event.key==='Enter')onCustomBench()" />
+      </div>
+    </div>
+
+    <div id="header-right">
+      <div id="status-bar">
+        <span id="status-dot"></span>
+        <span id="status-text">Loading…</span>
+      </div>
+
+      <!-- Edit Watchlist Button -->
+      <button class="icon-btn" onclick="openModal()" title="Edit Watchlist">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M11.5 2.5a1.414 1.414 0 012 2L5 13H2.5v-2.5L11.5 2.5z"/>
+        </svg>
+      </button>
+
+      <!-- Refresh Button -->
+      <button class="icon-btn" onclick="forceRefresh()" title="Refresh Data">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M13.5 8A5.5 5.5 0 112.5 5.5"/>
+          <path d="M2.5 2v3.5H6"/>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ── MAIN ────────────────────────────────────────────────── -->
+  <div id="main">
+
+    <!-- Chart Area -->
+    <div id="chart-area">
+      <div id="rrg-wrap">
+        <canvas id="rrg-chart"></canvas>
+        <div id="chart-error">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><circle cx="12" cy="16" r="0.5" fill="currentColor"/></svg>
+          <span id="chart-error-msg">Unable to load data</span>
+        </div>
+      </div>
+      <!-- Legend -->
+      <div id="legend"></div>
+    </div>
+
+    <!-- Intelligence Panel -->
+    <aside id="panel">
+
+      <!-- Quadrant Summary -->
+      <div class="panel-section">
+        <div class="section-label">Quadrant Map</div>
+        <div id="quadrant-groups">
+          <div class="q-group leading">
+            <div class="q-group-label">Leading</div>
+            <div class="q-group-tickers" id="q-leading"></div>
+          </div>
+          <div class="q-group weakening">
+            <div class="q-group-label">Weakening</div>
+            <div class="q-group-tickers" id="q-weakening"></div>
+          </div>
+          <div class="q-group improving">
+            <div class="q-group-label">Improving</div>
+            <div class="q-group-tickers" id="q-improving"></div>
+          </div>
+          <div class="q-group lagging">
+            <div class="q-group-label">Lagging</div>
+            <div class="q-group-tickers" id="q-lagging"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Alerts -->
+      <div class="panel-section">
+        <div class="section-label">Rotation Signals</div>
+        <div id="alerts-list"><div class="no-alerts">Awaiting data…</div></div>
+      </div>
+
+      <!-- Sector Table (scrollable) -->
+      <div id="sector-scroll">
+        <div id="sector-table-wrap">
+          <div class="s-label">Sector Detail</div>
+          <table class="sector-tbl">
+            <thead>
+              <tr>
+                <th>Sector</th>
+                <th>Quad</th>
+                <th>Conv</th>
+                <th>Align</th>
+                <th>⟳</th>
+              </tr>
+            </thead>
+            <tbody id="sector-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </aside>
+  </div><!-- /#main -->
+
+</div><!-- /#app -->
+
+<!-- ── MODAL ────────────────────────────────────────────────── -->
+<div id="modal-overlay">
+  <div id="modal">
+    <h2>Edit Watchlist</h2>
+    <p class="modal-sub">Add or remove sector / ETF tickers from the RRG chart.</p>
+    <div id="ticker-tags"></div>
+    <div id="add-ticker-row">
+      <input id="add-ticker-input" type="text" placeholder="Add ticker (e.g. XLK)" maxlength="8"
+             onkeydown="if(event.key==='Enter')addTicker()" />
+      <button class="btn btn-ghost btn-sm" onclick="addTicker()">Add</button>
+    </div>
+    <div class="modal-btns">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveWatchlist()">Save & Reload</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════
+   CONFIG
+═══════════════════════════════════════════════════════════════ */
+const CONFIG = {
+  apiKey: 'AQEre657fEzh_Sq_sZZKH5MgIvS83YGQ',
+  smaPeriod: 10,
+  rocPeriod: 10,
+  trailLength: 3,
+  lookbackDays: 400,       // calendar days fetched from API (~280 trading days)
+  refreshMs: 5 * 60 * 1000,
+  cacheTTL: 4 * 60 * 1000,
+};
+
+// Default sector definitions with muted, distinctive colors
+const DEFAULT_SECTORS = [
+  { ticker: 'XLK',  name: 'Technology',      color: '#4fa8e0' },
+  { ticker: 'XLF',  name: 'Financials',       color: '#5b8dd9' },
+  { ticker: 'XLV',  name: 'Healthcare',       color: '#e87d9a' },
+  { ticker: 'XLE',  name: 'Energy',           color: '#e07b39' },
+  { ticker: 'XLI',  name: 'Industrials',      color: '#9ca3af' },
+  { ticker: 'XLY',  name: 'Cons. Discret.',   color: '#d4a843' },
+  { ticker: 'XLP',  name: 'Cons. Staples',    color: '#6bac8a' },
+  { ticker: 'XLU',  name: 'Utilities',        color: '#64b5d4' },
+  { ticker: 'XLRE', name: 'Real Estate',      color: '#7ac4b8' },
+  { ticker: 'XLB',  name: 'Materials',        color: '#c9905a' },
+  { ticker: 'XLC',  name: 'Comm. Services',   color: '#9b72d4' },
+];
+
+// Color palette for custom-added tickers
+const EXTRA_COLORS = [
+  '#e0c060','#60b0d0','#d08070','#80c090','#c080c0',
+  '#90a0b0','#b0d060','#d0a080','#80b0c0','#c0b080',
+];
+
+/* ═══════════════════════════════════════════════════════════════
+   STATE
+═══════════════════════════════════════════════════════════════ */
+const STATE = {
+  timeframe: 'daily',
+  benchmark: 'SPY',
+  sectors: [],          // loaded from prefs or defaults
+  cache: {},            // { daily: {data, ts}, weekly: {data, ts} }
+  dailyRRG: [],         // [{sector, trail}]
+  weeklyRRG: [],
+  mutedTickers: new Set(),
+  chartInst: null,
+  refreshTimer: null,
+};
+
+/* ═══════════════════════════════════════════════════════════════
+   PREFERENCES — localStorage
+═══════════════════════════════════════════════════════════════ */
+function savePrefs() {
+  try {
+    localStorage.setItem('rrg_prefs', JSON.stringify({
+      timeframe: STATE.timeframe,
+      benchmark: STATE.benchmark,
+      sectors: STATE.sectors,
+    }));
+  } catch (e) { /* ignore */ }
+}
+
+function loadPrefs() {
+  try {
+    const p = JSON.parse(localStorage.getItem('rrg_prefs') || '{}');
+    STATE.timeframe = p.timeframe || 'daily';
+    STATE.benchmark = p.benchmark || 'SPY';
+    STATE.sectors   = (p.sectors && p.sectors.length > 0) ? p.sectors : [...DEFAULT_SECTORS];
+  } catch (e) {
+    STATE.sectors = [...DEFAULT_SECTORS];
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   UTILITIES
+═══════════════════════════════════════════════════════════════ */
+function dateStr(d) {
+  return d.toISOString().slice(0, 10);
+}
+
+function hexToRgba(hex, alpha) {
+  // Handle both 6-char and 3-char hex
+  let h = hex.replace('#', '');
+  if (h.length === 3) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
+  const r = parseInt(h.slice(0,2), 16);
+  const g = parseInt(h.slice(2,4), 16);
+  const b = parseInt(h.slice(4,6), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+/**
+ * Simple Moving Average — returns array of same length, nulls for
+ * positions before period-1.
+ */
+function sma(arr, period) {
+  const result = new Array(arr.length).fill(null);
+  let sum = 0;
+  for (let i = 0; i < arr.length; i++) {
+    sum += arr[i];
+    if (i >= period) sum -= arr[i - period];
+    if (i >= period - 1) result[i] = sum / period;
+  }
+  return result;
+}
+
+/**
+ * Rate of change: (arr[i] / arr[i - period]) * 100
+ * Returns null where insufficient lookback.
+ */
+function roc(arr, period) {
+  return arr.map((v, i) => {
+    if (i < period || arr[i - period] == null || arr[i - period] === 0) return null;
+    return (v / arr[i - period]) * 100;
+  });
+}
+
+/**
+ * Detect quadrant from (x, y) centered at 100.
+ */
+function quadrant(x, y) {
+  if (x >= 100 && y >= 100) return 'leading';
+  if (x >= 100 && y <  100) return 'weakening';
+  if (x <  100 && y <  100) return 'lagging';
+  return 'improving';
+}
+
+function quadrantLabel(q) {
+  return { leading:'Leading', weakening:'Weakening', lagging:'Lagging', improving:'Improving' }[q] || '—';
+}
+
+/**
+ * Conviction score: distance from center (100,100), normalized 0–100.
+ * Max typical distance is ~8 units.
+ */
+function convictionScore(x, y) {
+  const dist = Math.sqrt((x - 100) ** 2 + (y - 100) ** 2);
+  return Math.min(100, Math.round((dist / 6) * 100));
+}
+
+/**
+ * Detect trajectory reversal: both axes flip direction between [0]→[1] and [1]→[2]
+ */
+function isReversal(trail) {
+  if (trail.length < 3) return false;
+  const [a, b, c] = trail;
+  const dx1 = b.x - a.x, dy1 = b.y - a.y;
+  const dx2 = c.x - b.x, dy2 = c.y - b.y;
+  return Math.sign(dx1) !== Math.sign(dx2) || Math.sign(dy1) !== Math.sign(dy2);
+}
+
+/**
+ * Market hours check (approximate US Eastern time).
+ */
+function isMarketOpen() {
+  const now = new Date();
+  const day = now.getUTCDay();
+  if (day === 0 || day === 6) return false;
+  const month = now.getUTCMonth() + 1;
+  // Rough DST: second Sunday March → first Sunday November
+  const isDST = month > 3 && month < 11;
+  const utcOff = isDST ? 4 : 5;
+  const etH = (now.getUTCHours() - utcOff + 24) % 24;
+  const etM = now.getUTCMinutes();
+  const mins = etH * 60 + etM;
+  return mins >= 570 && mins < 960; // 9:30 – 16:00 ET
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   DATA FETCHING — Polygon.io
+═══════════════════════════════════════════════════════════════ */
+async function fetchBars(ticker, timeframe) {
+  const to   = new Date();
+  const from = new Date();
+  from.setDate(from.getDate() - CONFIG.lookbackDays);
+
+  const span = timeframe === 'weekly' ? 'week' : 'day';
+  const url  = `https://api.polygon.io/v2/aggs/ticker/${ticker}/range/1/${span}/${dateStr(from)}/${dateStr(to)}?adjusted=true&sort=asc&limit=500&apiKey=${CONFIG.apiKey}`;
+
+  try {
+    const res  = await fetch(url);
+    const json = await res.json();
+    if (json.status === 'ERROR' || !json.results) return [];
+    return json.results.map(b => ({ t: b.t, c: b.c }));
+  } catch (e) {
+    return [];
+  }
+}
+
+async function fetchAll(timeframe) {
+  const tickers = [STATE.benchmark, ...STATE.sectors.map(s => s.ticker)];
+  const results = await Promise.all(tickers.map(t => fetchBars(t, timeframe)));
+  const map = {};
+  tickers.forEach((t, i) => { map[t] = results[i]; });
+  return map;
+}
+
+async function getData(timeframe) {
+  const cached = STATE.cache[timeframe];
+  if (cached && (Date.now() - cached.ts) < CONFIG.cacheTTL) return cached.data;
+  const data = await fetchAll(timeframe);
+  STATE.cache[timeframe] = { data, ts: Date.now() };
+  return data;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   RRG CALCULATION ENGINE (JdK RS-Ratio / RS-Momentum)
+═══════════════════════════════════════════════════════════════ */
+
+/**
+ * Align two bar arrays by matching timestamps.
+ * Returns aligned close price arrays.
+ */
+function alignSeries(sectorBars, benchBars) {
+  const bMap = new Map(benchBars.map(b => [b.t, b.c]));
+  const aligned = sectorBars
+    .filter(b => bMap.has(b.t))
+    .map(b => ({ t: b.t, sc: b.c, bc: bMap.get(b.t) }));
+  return aligned;
+}
+
+/**
+ * Calculate JdK RS-Ratio and RS-Momentum trail for a single sector.
+ * Returns array of {x: rsRatio, y: rsMomentum} trail points, oldest→newest.
+ * Returns [] if insufficient data.
+ */
+function calculateRRG(sectorBars, benchBars) {
+  const aligned = alignSeries(sectorBars, benchBars);
+  const n = aligned.length;
+
+  // Minimum data required: smaPeriod + rocPeriod + smaPeriod + trailLength + buffer
+  const minRequired = CONFIG.smaPeriod * 3 + CONFIG.rocPeriod + 10;
+  if (n < minRequired) return [];
+
+  // Step 1: Raw RS ratio × 100
+  const rsRaw = aligned.map(d => (d.sc / d.bc) * 100);
+
+  // Step 2: Smooth RS with SMA(10) → JdK RS line
+  const rsSmooth = sma(rsRaw, CONFIG.smaPeriod);
+
+  // Step 3: JdK RS-Ratio = ROC of rsSmooth over 10 periods
+  //         Normalized to 100 center
+  const rsRatioRaw = roc(rsSmooth.map(v => v ?? 0), CONFIG.rocPeriod)
+    .map((v, i) => rsSmooth[i] == null ? null : v);
+
+  // Step 4: Apply SMA(10) to RS-Ratio values to smooth it
+  const validRsRatio = rsRatioRaw.filter(v => v !== null);
+  if (validRsRatio.length < CONFIG.smaPeriod) return [];
+
+  const rsRatioSmoothed = sma(validRsRatio, CONFIG.smaPeriod);
+
+  // Reconstruct full-length arrays preserving null positions
+  const rsRatioFull = new Array(n).fill(null);
+  let vIdx = 0;
+  rsRatioRaw.forEach((v, i) => {
+    if (v !== null) {
+      rsRatioFull[i] = rsRatioSmoothed[vIdx];
+      vIdx++;
+    }
+  });
+
+  // Step 5: RS-Momentum = ROC of rsRatioFull over 10 periods
+  const momRaw = roc(rsRatioFull.map(v => v ?? 0), CONFIG.rocPeriod)
+    .map((v, i) => rsRatioFull[i] == null ? null : v);
+
+  // Step 6: Smooth RS-Momentum with SMA(10)
+  const validMom = momRaw.filter(v => v !== null);
+  if (validMom.length < CONFIG.smaPeriod) return [];
+
+  const momSmoothed = sma(validMom, CONFIG.smaPeriod);
+
+  const momFull = new Array(n).fill(null);
+  let mIdx = 0;
+  momRaw.forEach((v, i) => {
+    if (v !== null) {
+      momFull[i] = momSmoothed[mIdx];
+      mIdx++;
+    }
+  });
+
+  // Step 7: Extract last trailLength valid points
+  const trail = [];
+  for (let i = n - 1; i >= 0 && trail.length < CONFIG.trailLength; i--) {
+    if (rsRatioFull[i] !== null && momFull[i] !== null) {
+      trail.unshift({ x: rsRatioFull[i], y: momFull[i] });
+    }
+  }
+
+  return trail; // [{x,y}, {x,y}, {x,y}] oldest→newest
+}
+
+/**
+ * Compute RRG data for all sectors against current benchmark.
+ */
+function computeAllRRG(rawData) {
+  const benchBars = rawData[STATE.benchmark] || [];
+  return STATE.sectors.map(sector => ({
+    sector,
+    trail: calculateRRG(rawData[sector.ticker] || [], benchBars),
+  }));
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CHART.JS PLUGINS
+═══════════════════════════════════════════════════════════════ */
+
+/**
+ * Plugin 1: Draws quadrant background fills, crosshair lines, and labels.
+ * Runs in beforeDraw so it renders behind data points.
+ */
+const quadrantFillsPlugin = {
+  id: 'quadrantFills',
+  beforeDraw(chart) {
+    const { ctx, chartArea: ca, scales } = chart;
+    if (!ca || !scales.x || !scales.y) return;
+
+    const cx = scales.x.getPixelForValue(100);
+    const cy = scales.y.getPixelForValue(100);
+
+    // Guard: center lines must be inside chart area
+    const clampedCx = Math.max(ca.left, Math.min(ca.right,  cx));
+    const clampedCy = Math.max(ca.top,  Math.min(ca.bottom, cy));
+
+    ctx.save();
+
+    // ── Quadrant background fills ──
+    const fills = [
+      // top-left: Weakening   (RS > 100, Mom < 100)
+      { x: clampedCx, y: ca.top,    w: ca.right - clampedCx,    h: clampedCy - ca.top,    color: 'rgba(180,100,60,0.05)',  label: 'WEAKENING',  lx: clampedCx + 8, ly: ca.top + 16 },
+      // top-right: Leading    (RS > 100, Mom > 100)
+      { x: ca.left,   y: ca.top,    w: clampedCx - ca.left,     h: clampedCy - ca.top,    color: 'rgba(61,138,110,0.07)', label: 'LEADING',    lx: ca.left + 8,   ly: ca.top + 16 },
+      // bottom-left: Lagging  (RS < 100, Mom < 100)
+      { x: ca.left,   y: clampedCy, w: clampedCx - ca.left,     h: ca.bottom - clampedCy, color: 'rgba(138,64,64,0.05)',  label: 'LAGGING',    lx: ca.left + 8,   ly: clampedCy + 18 },
+      // bottom-right: Improving (RS < 100, Mom > 100)
+      { x: clampedCx, y: clampedCy, w: ca.right - clampedCx,    h: ca.bottom - clampedCy, color: 'rgba(74,127,165,0.07)', label: 'IMPROVING',  lx: clampedCx + 8, ly: clampedCy + 18 },
+    ];
+
+    fills.forEach(q => {
+      if (q.w <= 0 || q.h <= 0) return;
+      ctx.fillStyle = q.color;
+      ctx.fillRect(q.x, q.y, q.w, q.h);
+    });
+
+    // ── Quadrant labels ──
+    ctx.font = '600 10px Inter, sans-serif';
+    ctx.letterSpacing = '0.06em';
+    fills.forEach(q => {
+      if (q.w <= 0 || q.h <= 0) return;
+      // Use light or dark text depending on quadrant sentiment
+      const isPositive = q.label === 'LEADING' || q.label === 'IMPROVING';
+      ctx.fillStyle = isPositive ? 'rgba(180,220,200,0.18)' : 'rgba(220,180,180,0.14)';
+      ctx.fillText(q.label, q.lx, q.ly);
+    });
+
+    // ── Crosshair lines at 100/100 ──
+    ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 5]);
+
+    ctx.beginPath();
+    ctx.moveTo(clampedCx, ca.top);
+    ctx.lineTo(clampedCx, ca.bottom);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(ca.left,  clampedCy);
+    ctx.lineTo(ca.right, clampedCy);
+    ctx.stroke();
+
+    ctx.setLineDash([]);
+    ctx.restore();
+  },
+};
+
+/**
+ * Plugin 2: Draws bezier trail lines connecting the 3 trail points.
+ * Runs in afterDraw so it renders above quadrant fills, below tooltips.
+ * Also draws a small directional arrowhead on the final segment.
+ */
+const trailLinesPlugin = {
+  id: 'rrgTrails',
+  afterDraw(chart) {
+    const { ctx } = chart;
+
+    chart.data.datasets.forEach((dataset, dsIdx) => {
+      const meta   = chart.getDatasetMeta(dsIdx);
+      const points = meta.data;
+      if (!points || points.length < 2) return;
+      if (!meta.visible) return;
+
+      const color = dataset.borderColor;
+      if (!color) return;
+
+      ctx.save();
+      ctx.strokeStyle = hexToRgba(color, 0.55);
+      ctx.lineWidth   = 1.8;
+      ctx.setLineDash([]);
+      ctx.lineCap     = 'round';
+      ctx.lineJoin    = 'round';
+
+      // Draw smooth curve through points using quadratic bezier midpoints
+      ctx.beginPath();
+      ctx.moveTo(points[0].x, points[0].y);
+
+      if (points.length === 2) {
+        ctx.lineTo(points[1].x, points[1].y);
+      } else {
+        // Quadratic bezier through midpoints for smooth curve
+        for (let i = 1; i < points.length - 1; i++) {
+          const midX = (points[i].x + points[i + 1].x) / 2;
+          const midY = (points[i].y + points[i + 1].y) / 2;
+          ctx.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
+        }
+        const last = points[points.length - 1];
+        const prev = points[points.length - 2];
+        ctx.quadraticCurveTo(prev.x, prev.y, last.x, last.y);
+      }
+
+      ctx.stroke();
+
+      // ── Arrowhead on the final segment ──
+      const last  = points[points.length - 1];
+      const prev  = points[points.length - 2];
+      const angle = Math.atan2(last.y - prev.y, last.x - prev.x);
+      const aLen  = 7;
+
+      ctx.fillStyle = hexToRgba(color, 0.75);
+      ctx.beginPath();
+      ctx.moveTo(last.x, last.y);
+      ctx.lineTo(
+        last.x - aLen * Math.cos(angle - Math.PI / 6),
+        last.y - aLen * Math.sin(angle - Math.PI / 6)
+      );
+      ctx.lineTo(
+        last.x - aLen * Math.cos(angle + Math.PI / 6),
+        last.y - aLen * Math.sin(angle + Math.PI / 6)
+      );
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.restore();
+    });
+  },
+};
+
+/* ═══════════════════════════════════════════════════════════════
+   CHART INITIALIZATION & UPDATE
+═══════════════════════════════════════════════════════════════ */
+
+/**
+ * Build a Chart.js dataset for one sector.
+ * trail = [{x, y}, ...] oldest→newest (up to 3 points)
+ */
+function buildDataset(sector, trail) {
+  const n = trail.length;
+  // Point sizes: oldest=5, middle=9, newest=13
+  const sizes   = [5, 9, 13].slice(-n);
+  const alphas  = [0.25, 0.55, 1.0].slice(-n);
+
+  return {
+    label: sector.ticker,
+    data:  trail,
+    backgroundColor: trail.map((_, i) => hexToRgba(sector.color, alphas[i])),
+    borderColor:     sector.color,
+    borderWidth:     trail.map((_, i) => i === n - 1 ? 1.5 : 0),
+    pointRadius:     sizes,
+    pointHoverRadius:sizes.map(s => s + 3),
+    showLine:        false,
+    sectorColor:     sector.color,  // accessed by trail plugin
+  };
+}
+
+function initChart() {
+  const canvas = document.getElementById('rrg-chart');
+
+  // Size canvas square within its container
+  const wrap = document.getElementById('rrg-wrap');
+  const size = Math.min(wrap.clientWidth, wrap.clientHeight - 10) || 600;
+  canvas.style.width  = size + 'px';
+  canvas.style.height = size + 'px';
+
+  const cfg = {
+    type: 'scatter',
+    data: { datasets: [] },
+    options: {
+      responsive: false,
+      animation: { duration: 500, easing: 'easeInOutQuart' },
+      layout: { padding: { top: 10, right: 16, bottom: 10, left: 8 } },
+      scales: {
+        x: {
+          type: 'linear',
+          title: {
+            display: true,
+            text: 'JdK RS-Ratio',
+            color: '#3e3e50',
+            font: { size: 10, family: 'Inter', weight: '400' },
+          },
+          grid:  { color: 'rgba(255,255,255,0.03)', lineWidth: 1 },
+          border: { color: 'transparent' },
+          ticks: {
+            color: '#3e3e50',
+            font:  { size: 10, family: 'Inter' },
+            maxTicksLimit: 7,
+          },
+          suggestedMin: 97,
+          suggestedMax: 103,
+        },
+        y: {
+          type: 'linear',
+          title: {
+            display: true,
+            text: 'JdK RS-Momentum',
+            color: '#3e3e50',
+            font: { size: 10, family: 'Inter', weight: '400' },
+          },
+          grid:  { color: 'rgba(255,255,255,0.03)', lineWidth: 1 },
+          border: { color: 'transparent' },
+          ticks: {
+            color: '#3e3e50',
+            font:  { size: 10, family: 'Inter' },
+            maxTicksLimit: 7,
+          },
+          suggestedMin: 97,
+          suggestedMax: 103,
+        },
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#17171d',
+          borderColor: '#26262f',
+          borderWidth: 1,
+          titleColor: '#e2e2ea',
+          bodyColor: '#6b6b7e',
+          padding: 10,
+          cornerRadius: 6,
+          callbacks: {
+            title: (items) => {
+              const dsIdx  = items[0].datasetIndex;
+              const sector = STATE.sectors[dsIdx];
+              return sector ? `${sector.ticker} · ${sector.name}` : '';
+            },
+            label: (item) => {
+              const q = quadrantLabel(quadrant(item.parsed.x, item.parsed.y));
+              const conv = convictionScore(item.parsed.x, item.parsed.y);
+              return [
+                `RS-Ratio:    ${item.parsed.x.toFixed(3)}`,
+                `Momentum:  ${item.parsed.y.toFixed(3)}`,
+                `Quadrant:   ${q}`,
+                `Conviction: ${conv}`,
+              ];
+            },
+          },
+        },
+      },
+    },
+    plugins: [quadrantFillsPlugin, trailLinesPlugin],
+  };
+
+  STATE.chartInst = new Chart(canvas, cfg);
+}
+
+/**
+ * Update chart datasets and auto-scale axes.
+ */
+function updateChart(rrgData) {
+  if (!STATE.chartInst) return;
+
+  const datasets = rrgData
+    .filter(d => !STATE.mutedTickers.has(d.sector.ticker))
+    .map(d => buildDataset(d.sector, d.trail));
+
+  STATE.chartInst.data.datasets = datasets;
+
+  // Auto-scale axes with padding
+  const allX = rrgData.flatMap(d => d.trail.map(p => p.x)).filter(v => isFinite(v));
+  const allY = rrgData.flatMap(d => d.trail.map(p => p.y)).filter(v => isFinite(v));
+
+  if (allX.length && allY.length) {
+    const pad = 0.8;
+    const xMin = Math.min(...allX, 99.5) - pad;
+    const xMax = Math.max(...allX, 100.5) + pad;
+    const yMin = Math.min(...allY, 99.5) - pad;
+    const yMax = Math.max(...allY, 100.5) + pad;
+
+    STATE.chartInst.options.scales.x.min = xMin;
+    STATE.chartInst.options.scales.x.max = xMax;
+    STATE.chartInst.options.scales.y.min = yMin;
+    STATE.chartInst.options.scales.y.max = yMax;
+  }
+
+  STATE.chartInst.update('active');
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   INTELLIGENCE PANEL
+═══════════════════════════════════════════════════════════════ */
+
+/**
+ * Detect alerts: quadrant changes, reversals, rotation pairs.
+ */
+function computeAlerts(dailyRRG) {
+  const alerts = [];
+
+  dailyRRG.forEach(({ sector, trail }) => {
+    if (trail.length < 2) return;
+    const prev = trail[trail.length - 2];
+    const curr = trail[trail.length - 1];
+    const prevQ = quadrant(prev.x, prev.y);
+    const currQ = quadrant(curr.x, curr.y);
+
+    if (prevQ !== currQ) {
+      const bull = currQ === 'leading' || currQ === 'improving';
+      alerts.push({
+        type:    'quad_change',
+        text:    `<strong>${sector.ticker}</strong> entered ${quadrantLabel(currQ)} from ${quadrantLabel(prevQ)}`,
+        urgency: bull ? 'bullish' : 'bearish',
+      });
+    }
+
+    if (isReversal(trail)) {
+      const currQ_ = quadrant(curr.x, curr.y);
+      const isTurningBull = (currQ_ === 'lagging' || currQ_ === 'weakening') &&
+                             curr.y > prev.y;
+      alerts.push({
+        type:    'reversal',
+        text:    `<strong>${sector.ticker}</strong> reversing — trajectory changing direction`,
+        urgency: isTurningBull ? 'bullish' : 'neutral',
+      });
+    }
+  });
+
+  // Rotation pair suggestions: weakening → improving
+  const weakening = dailyRRG.filter(d => d.trail.length && quadrant(d.trail.at(-1).x, d.trail.at(-1).y) === 'weakening');
+  const improving = dailyRRG.filter(d => d.trail.length && quadrant(d.trail.at(-1).x, d.trail.at(-1).y) === 'improving');
+
+  if (weakening.length && improving.length) {
+    const from = weakening[0].sector.ticker;
+    const to   = improving[0].sector.ticker;
+    alerts.push({
+      type:    'rotation',
+      text:    `Consider rotating <strong>${from}</strong> → <strong>${to}</strong>`,
+      urgency: 'bullish',
+    });
+  }
+
+  return alerts;
+}
+
+/**
+ * Render the full intelligence panel.
+ */
+function renderPanel(dailyRRG, weeklyRRG) {
+  // ── Quadrant groups ──
+  const groups = { leading: [], weakening: [], improving: [], lagging: [] };
+  dailyRRG.forEach(({ sector, trail }) => {
+    if (!trail.length) return;
+    const q = quadrant(trail.at(-1).x, trail.at(-1).y);
+    groups[q].push({ ticker: sector.ticker, color: sector.color });
+  });
+
+  ['leading','weakening','improving','lagging'].forEach(q => {
+    const el = document.getElementById(`q-${q}`);
+    if (!el) return;
+    el.innerHTML = groups[q].length
+      ? groups[q].map(s =>
+          `<span class="q-ticker" style="border-left: 2px solid ${s.color}">${s.ticker}</span>`
+        ).join('')
+      : `<span class="q-ticker" style="color:var(--text-ter)">—</span>`;
+  });
+
+  // ── Alerts ──
+  const alerts = computeAlerts(dailyRRG);
+  const alertsEl = document.getElementById('alerts-list');
+  if (alerts.length) {
+    alertsEl.innerHTML = alerts.map(a => `
+      <div class="alert-card ${a.urgency}">
+        <span class="alert-icon"></span>
+        <span class="alert-text">${a.text}</span>
+      </div>`).join('');
+  } else {
+    alertsEl.innerHTML = '<div class="no-alerts">No rotation signals detected</div>';
+  }
+
+  // ── Sector table ──
+  const tbody = document.getElementById('sector-tbody');
+  if (!tbody) return;
+
+  // Build weekly quadrant lookup
+  const weeklyMap = {};
+  weeklyRRG.forEach(({ sector, trail }) => {
+    if (trail.length) weeklyMap[sector.ticker] = quadrant(trail.at(-1).x, trail.at(-1).y);
+  });
+
+  tbody.innerHTML = dailyRRG.map(({ sector, trail }) => {
+    const hasData = trail.length > 0;
+    const curr    = hasData ? trail.at(-1) : null;
+    const q       = curr ? quadrant(curr.x, curr.y) : null;
+    const conv    = curr ? convictionScore(curr.x, curr.y) : 0;
+    const wq      = weeklyMap[sector.ticker];
+
+    let alignBadge = '';
+    if (q && wq) {
+      if (q === wq) {
+        alignBadge = `<span class="badge-align aligned">✓ ${quadrantLabel(q).slice(0,4)}</span>`;
+      } else {
+        alignBadge = `<span class="badge-align diverged">⚠ Split</span>`;
+      }
+    } else {
+      alignBadge = `<span class="badge-align unknown">—</span>`;
+    }
+
+    const rev = hasData && isReversal(trail)
+      ? '<span class="badge-trend badge-reversal">↻</span>'
+      : (hasData ? '<span class="badge-trend badge-consistent">→</span>' : '');
+
+    return `<tr>
+      <td>
+        <div class="td-sector">
+          <span class="td-dot" style="background:${sector.color}"></span>
+          <span class="td-ticker">${sector.ticker}</span>
+        </div>
+      </td>
+      <td class="td-quad ${q || ''}">${q ? quadrantLabel(q).slice(0,4) : '—'}</td>
+      <td class="td-center" style="color:${conv > 60 ? '#3d8a6e' : conv > 30 ? '#b87040' : 'var(--text-sec)'}">
+        ${hasData ? conv : '—'}
+      </td>
+      <td class="td-center">${alignBadge}</td>
+      <td class="td-center">${rev}</td>
+    </tr>`;
+  }).join('');
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   LEGEND
+═══════════════════════════════════════════════════════════════ */
+function renderLegend() {
+  const el = document.getElementById('legend');
+  if (!el) return;
+  el.innerHTML = STATE.sectors.map(s => `
+    <div class="legend-item ${STATE.mutedTickers.has(s.ticker) ? 'muted' : ''}"
+         onclick="toggleMute('${s.ticker}')" title="Toggle ${s.name}">
+      <span class="legend-dot" style="background:${s.color}"></span>
+      <span class="legend-label">${s.ticker}</span>
+    </div>`).join('');
+}
+
+function toggleMute(ticker) {
+  if (STATE.mutedTickers.has(ticker)) {
+    STATE.mutedTickers.delete(ticker);
+  } else {
+    STATE.mutedTickers.add(ticker);
+  }
+  renderLegend();
+  const rrgData = STATE.timeframe === 'daily' ? STATE.dailyRRG : STATE.weeklyRRG;
+  updateChart(rrgData);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   STATUS BAR
+═══════════════════════════════════════════════════════════════ */
+function updateStatusBar(loading = false) {
+  const dot  = document.getElementById('status-dot');
+  const text = document.getElementById('status-text');
+  if (!dot || !text) return;
+
+  if (loading) {
+    dot.className = 'loading';
+    text.textContent = 'Fetching…';
+    return;
+  }
+
+  const open = isMarketOpen();
+  dot.className = open ? '' : 'closed';
+
+  const now = new Date();
+  const hh  = now.getHours().toString().padStart(2,'0');
+  const mm  = now.getMinutes().toString().padStart(2,'0');
+  text.textContent = `Updated ${hh}:${mm} · ${open ? 'Market Open' : 'Market Closed'}`;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   RENDERING PIPELINE
+═══════════════════════════════════════════════════════════════ */
+async function renderAll() {
+  updateStatusBar(true);
+
+  try {
+    // Fetch both timeframes simultaneously for alignment check in intelligence panel
+    const [dailyRaw, weeklyRaw] = await Promise.all([
+      getData('daily'),
+      getData('weekly'),
+    ]);
+
+    STATE.dailyRRG  = computeAllRRG(dailyRaw);
+    STATE.weeklyRRG = computeAllRRG(weeklyRaw);
+
+    // Check if we got any useful data
+    const hasData = STATE.dailyRRG.some(d => d.trail.length > 0);
+
+    if (!hasData) {
+      showChartError('No data returned — check API key or market hours');
+    } else {
+      hideChartError();
+      const active = STATE.timeframe === 'daily' ? STATE.dailyRRG : STATE.weeklyRRG;
+      updateChart(active);
+    }
+
+    renderPanel(STATE.dailyRRG, STATE.weeklyRRG);
+  } catch (e) {
+    showChartError('Failed to fetch data: ' + e.message);
+  }
+
+  updateStatusBar(false);
+}
+
+function showChartError(msg) {
+  const err = document.getElementById('chart-error');
+  const msgEl = document.getElementById('chart-error-msg');
+  if (err) err.classList.add('visible');
+  if (msgEl) msgEl.textContent = msg;
+}
+
+function hideChartError() {
+  const err = document.getElementById('chart-error');
+  if (err) err.classList.remove('visible');
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   UI CONTROLS
+═══════════════════════════════════════════════════════════════ */
+
+/**
+ * Switch Daily / Weekly timeframe.
+ */
+async function switchTimeframe(tf) {
+  if (tf === STATE.timeframe) return;
+
+  // Visual fade
+  const wrap = document.getElementById('rrg-wrap');
+  wrap.classList.add('fading');
+
+  await new Promise(r => setTimeout(r, 180));
+
+  STATE.timeframe = tf;
+  savePrefs();
+
+  // Update tab active state
+  document.querySelectorAll('.tf-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tf === tf);
+  });
+
+  const rrgData = tf === 'daily' ? STATE.dailyRRG : STATE.weeklyRRG;
+  updateChart(rrgData);
+
+  wrap.classList.remove('fading');
+}
+
+/**
+ * Benchmark selector change.
+ */
+function onBenchChange(val) {
+  const customInput = document.getElementById('bench-custom');
+  if (val === 'custom') {
+    customInput.style.display = 'block';
+    customInput.focus();
+  } else {
+    customInput.style.display = 'none';
+    STATE.benchmark = val;
+    STATE.cache = {}; // invalidate all cache
+    savePrefs();
+    renderAll();
+  }
+}
+
+function onCustomBench() {
+  const input = document.getElementById('bench-custom');
+  const ticker = input.value.trim().toUpperCase();
+  if (ticker.length >= 1) {
+    STATE.benchmark = ticker;
+    STATE.cache = {};
+    savePrefs();
+    renderAll();
+  }
+}
+
+/**
+ * Force refresh — bypasses cache.
+ */
+function forceRefresh() {
+  STATE.cache = {};
+  renderAll();
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   WATCHLIST MODAL
+═══════════════════════════════════════════════════════════════ */
+// Working copy while modal is open
+let _modalSectors = [];
+
+function openModal() {
+  _modalSectors = STATE.sectors.map(s => ({ ...s }));
+  renderModalTags();
+  document.getElementById('modal-overlay').classList.add('visible');
+  document.getElementById('add-ticker-input').value = '';
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('visible');
+}
+
+function renderModalTags() {
+  const container = document.getElementById('ticker-tags');
+  container.innerHTML = _modalSectors.map(s => `
+    <div class="ticker-tag">
+      <span class="td-dot" style="width:6px;height:6px;border-radius:50%;background:${s.color};flex-shrink:0"></span>
+      ${s.ticker}
+      <button class="remove-btn" onclick="removeModalTicker('${s.ticker}')" title="Remove">×</button>
+    </div>`).join('');
+}
+
+function removeModalTicker(ticker) {
+  _modalSectors = _modalSectors.filter(s => s.ticker !== ticker);
+  renderModalTags();
+}
+
+function addTicker() {
+  const input  = document.getElementById('add-ticker-input');
+  const ticker = input.value.trim().toUpperCase();
+  if (!ticker) return;
+  if (_modalSectors.find(s => s.ticker === ticker)) {
+    input.value = '';
+    return;
+  }
+  // Assign color from extra palette cycling
+  const usedColors = new Set(_modalSectors.map(s => s.color));
+  const freeColor  = EXTRA_COLORS.find(c => !usedColors.has(c)) || EXTRA_COLORS[_modalSectors.length % EXTRA_COLORS.length];
+  _modalSectors.push({ ticker, name: ticker, color: freeColor });
+  renderModalTags();
+  input.value = '';
+  input.focus();
+}
+
+function saveWatchlist() {
+  if (_modalSectors.length === 0) return; // don't allow empty watchlist
+  STATE.sectors = _modalSectors;
+  STATE.cache   = {}; // force re-fetch with new tickers
+  savePrefs();
+  closeModal();
+  renderLegend();
+  renderAll();
+}
+
+// Close modal on overlay click
+document.getElementById('modal-overlay').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+
+/* ═══════════════════════════════════════════════════════════════
+   AUTO-REFRESH
+═══════════════════════════════════════════════════════════════ */
+function startAutoRefresh() {
+  if (STATE.refreshTimer) clearInterval(STATE.refreshTimer);
+  STATE.refreshTimer = setInterval(() => {
+    if (isMarketOpen()) {
+      // Invalidate cache so next render fetches fresh data
+      STATE.cache = {};
+      renderAll();
+    }
+  }, CONFIG.refreshMs);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   BOOTSTRAP
+═══════════════════════════════════════════════════════════════ */
+document.addEventListener('DOMContentLoaded', async () => {
+  // 1. Load persisted preferences
+  loadPrefs();
+
+  // 2. Sync UI state to loaded prefs
+  document.querySelectorAll('.tf-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tf === STATE.timeframe);
+  });
+
+  const benchSelect = document.getElementById('bench-select');
+  const presets = ['SPY','QQQ','DIA'];
+  if (presets.includes(STATE.benchmark)) {
+    benchSelect.value = STATE.benchmark;
+  } else {
+    benchSelect.value = 'custom';
+    const ci = document.getElementById('bench-custom');
+    ci.style.display = 'block';
+    ci.value = STATE.benchmark;
+  }
+
+  // 3. Build legend strip
+  renderLegend();
+
+  // 4. Initialize Chart.js (empty datasets, correct size)
+  initChart();
+
+  // 5. Fetch data and render everything
+  await renderAll();
+
+  // 6. Start auto-refresh timer
+  startAutoRefresh();
+
+  // 7. Handle window resize — keep chart square
+  let resizeTimer;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      if (STATE.chartInst) {
+        const wrap = document.getElementById('rrg-wrap');
+        const size = Math.min(wrap.clientWidth, wrap.clientHeight - 10);
+        const canvas = document.getElementById('rrg-chart');
+        canvas.style.width  = size + 'px';
+        canvas.style.height = size + 'px';
+        STATE.chartInst.resize(size, size);
+      }
+    }, 150);
+  });
+});
+</script>
+</body>
+</html>
