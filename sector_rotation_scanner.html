@@ -247,7 +247,7 @@
     #main {
       flex: 1;
       display: grid;
-      grid-template-columns: 1fr 310px;
+      grid-template-columns: 1fr 260px;
       overflow: hidden;
     }
 
@@ -257,7 +257,7 @@
     #chart-area {
       display: flex;
       flex-direction: column;
-      padding: 16px;
+      padding: 10px 12px;
       overflow: hidden;
       min-width: 0;
     }
@@ -707,10 +707,61 @@
       #bench-wrap label { display: none; }
       #chart-area { padding: 10px; }
     }
+
+    /* ────────────────────────────────────────────────────────────
+       PAGE NAVIGATION
+    ──────────────────────────────────────────────────────────── */
+    #page-nav {
+      display: flex;
+      gap: 2px;
+      padding: 6px 16px 0;
+      background: var(--bg-0);
+      border-bottom: 1px solid var(--border-dim);
+      flex-shrink: 0;
+    }
+
+    .page-tab {
+      padding: 5px 14px;
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: var(--text-ter);
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: color 0.15s, border-color 0.15s;
+      margin-bottom: -1px;
+    }
+
+    .page-tab:hover  { color: var(--text-sec); }
+    .page-tab.active { color: var(--text-pri); border-bottom-color: var(--accent); }
+
+    .page { display: none; flex: 1; flex-direction: column; overflow: hidden; }
+    .page.active { display: flex; }
+
+    #page-p2-placeholder {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-ter);
+      font-size: 13px;
+      letter-spacing: 0.02em;
+    }
   </style>
 </head>
 <body>
 <div id="app">
+
+  <!-- ── PAGE NAV ────────────────────────────────────────────── -->
+  <nav id="page-nav">
+    <button class="page-tab active" data-page="rrg" onclick="switchPage('rrg')">RRG Scanner</button>
+    <button class="page-tab"        data-page="p2"  onclick="switchPage('p2')">— New Page</button>
+  </nav>
+
+  <!-- ── PAGE: RRG ────────────────────────────────────────────── -->
+  <div id="page-rrg" class="page active">
 
   <!-- ── HEADER ──────────────────────────────────────────────── -->
   <header id="header">
@@ -722,8 +773,8 @@
     <div id="header-controls">
       <!-- Timeframe Tabs -->
       <div id="tf-tabs">
-        <button class="tf-btn active" data-tf="daily" onclick="switchTimeframe('daily')">Daily</button>
-        <button class="tf-btn" data-tf="weekly" onclick="switchTimeframe('weekly')">Weekly</button>
+        <button class="tf-btn active" data-tf="weekly" onclick="switchTimeframe('weekly')">Weekly</button>
+        <button class="tf-btn" data-tf="monthly" onclick="switchTimeframe('monthly')">Monthly</button>
       </div>
 
       <!-- Benchmark Selector -->
@@ -832,6 +883,15 @@
 
     </aside>
   </div><!-- /#main -->
+
+  </div><!-- /#page-rrg -->
+
+  <!-- ── PAGE: P2 ─────────────────────────────────────────────── -->
+  <div id="page-p2" class="page">
+    <div id="page-p2-placeholder">
+      <span>New page — coming soon</span>
+    </div>
+  </div>
 
 </div><!-- /#app -->
 
@@ -1337,7 +1397,7 @@ function initChart() {
 
   // Size canvas square within its container
   const wrap = document.getElementById('rrg-wrap');
-  const size = Math.min(wrap.clientWidth, wrap.clientHeight - 10) || 600;
+  const size = Math.min(wrap.clientWidth - 4, wrap.clientHeight - 4) || 640;
   canvas.style.width  = size + 'px';
   canvas.style.height = size + 'px';
 
@@ -1461,10 +1521,10 @@ function updateChart(rrgData) {
 /**
  * Detect alerts: quadrant changes, reversals, rotation pairs.
  */
-function computeAlerts(dailyRRG) {
+function computeAlerts(weeklyRRG) {
   const alerts = [];
 
-  dailyRRG.forEach(({ sector, trail }) => {
+  weeklyRRG.forEach(({ sector, trail }) => {
     if (trail.length < 2) return;
     const prev = trail[trail.length - 2];
     const curr = trail[trail.length - 1];
@@ -1493,8 +1553,8 @@ function computeAlerts(dailyRRG) {
   });
 
   // Rotation pair suggestions: weakening → improving
-  const weakening = dailyRRG.filter(d => d.trail.length && quadrant(d.trail.at(-1).x, d.trail.at(-1).y) === 'weakening');
-  const improving = dailyRRG.filter(d => d.trail.length && quadrant(d.trail.at(-1).x, d.trail.at(-1).y) === 'improving');
+  const weakening = weeklyRRG.filter(d => d.trail.length && quadrant(d.trail.at(-1).x, d.trail.at(-1).y) === 'weakening');
+  const improving = weeklyRRG.filter(d => d.trail.length && quadrant(d.trail.at(-1).x, d.trail.at(-1).y) === 'improving');
 
   if (weakening.length && improving.length) {
     const from = weakening[0].sector.ticker;
@@ -1512,10 +1572,10 @@ function computeAlerts(dailyRRG) {
 /**
  * Render the full intelligence panel.
  */
-function renderPanel(dailyRRG, weeklyRRG) {
+function renderPanel(weeklyRRG, monthlyRRG) {
   // ── Quadrant groups ──
   const groups = { leading: [], weakening: [], improving: [], lagging: [] };
-  dailyRRG.forEach(({ sector, trail }) => {
+  weeklyRRG.forEach(({ sector, trail }) => {
     if (!trail.length) return;
     const q = quadrant(trail.at(-1).x, trail.at(-1).y);
     groups[q].push({ ticker: sector.ticker, color: sector.color });
@@ -1532,7 +1592,7 @@ function renderPanel(dailyRRG, weeklyRRG) {
   });
 
   // ── Alerts ──
-  const alerts = computeAlerts(dailyRRG);
+  const alerts = computeAlerts(weeklyRRG);
   const alertsEl = document.getElementById('alerts-list');
   if (alerts.length) {
     alertsEl.innerHTML = alerts.map(a => `
@@ -1548,18 +1608,18 @@ function renderPanel(dailyRRG, weeklyRRG) {
   const tbody = document.getElementById('sector-tbody');
   if (!tbody) return;
 
-  // Build weekly quadrant lookup
-  const weeklyMap = {};
-  weeklyRRG.forEach(({ sector, trail }) => {
-    if (trail.length) weeklyMap[sector.ticker] = quadrant(trail.at(-1).x, trail.at(-1).y);
+  // Build monthly quadrant lookup for W/M alignment check
+  const monthlyMap = {};
+  monthlyRRG.forEach(({ sector, trail }) => {
+    if (trail.length) monthlyMap[sector.ticker] = quadrant(trail.at(-1).x, trail.at(-1).y);
   });
 
-  tbody.innerHTML = dailyRRG.map(({ sector, trail }) => {
+  tbody.innerHTML = weeklyRRG.map(({ sector, trail }) => {
     const hasData = trail.length > 0;
     const curr    = hasData ? trail.at(-1) : null;
     const q       = curr ? quadrant(curr.x, curr.y) : null;
     const conv    = curr ? convictionScore(curr.x, curr.y) : 0;
-    const wq      = weeklyMap[sector.ticker];
+    const wq      = monthlyMap[sector.ticker];
 
     let alignBadge = '';
     if (q && wq) {
@@ -1614,7 +1674,7 @@ function toggleMute(ticker) {
     STATE.mutedTickers.add(ticker);
   }
   renderLegend();
-  const rrgData = STATE.timeframe === 'daily' ? STATE.dailyRRG : STATE.weeklyRRG;
+  const rrgData = STATE.timeframe === 'weekly' ? STATE.weeklyRRG : STATE.monthlyRRG;
   updateChart(rrgData);
 }
 
@@ -1649,26 +1709,26 @@ async function renderAll() {
 
   try {
     // Fetch both timeframes simultaneously for alignment check in intelligence panel
-    const [dailyRaw, weeklyRaw] = await Promise.all([
-      getData('daily'),
+    const [weeklyRaw, monthlyRaw] = await Promise.all([
       getData('weekly'),
+      getData('monthly'),
     ]);
 
-    STATE.dailyRRG  = computeAllRRG(dailyRaw);
-    STATE.weeklyRRG = computeAllRRG(weeklyRaw);
+    STATE.weeklyRRG  = computeAllRRG(weeklyRaw,  'weekly');
+    STATE.monthlyRRG = computeAllRRG(monthlyRaw, 'monthly');
 
     // Check if we got any useful data
-    const hasData = STATE.dailyRRG.some(d => d.trail.length > 0);
+    const hasData = STATE.weeklyRRG.some(d => d.trail.length > 0);
 
     if (!hasData) {
       showChartError('No data returned — check API key or market hours');
     } else {
       hideChartError();
-      const active = STATE.timeframe === 'daily' ? STATE.dailyRRG : STATE.weeklyRRG;
+      const active = STATE.timeframe === 'weekly' ? STATE.weeklyRRG : STATE.monthlyRRG;
       updateChart(active);
     }
 
-    renderPanel(STATE.dailyRRG, STATE.weeklyRRG);
+    renderPanel(STATE.weeklyRRG, STATE.monthlyRRG);
   } catch (e) {
     showChartError('Failed to fetch data: ' + e.message);
   }
@@ -1712,7 +1772,7 @@ async function switchTimeframe(tf) {
     btn.classList.toggle('active', btn.dataset.tf === tf);
   });
 
-  const rrgData = tf === 'daily' ? STATE.dailyRRG : STATE.weeklyRRG;
+  const rrgData = tf === 'weekly' ? STATE.weeklyRRG : STATE.monthlyRRG;
   updateChart(rrgData);
 
   wrap.classList.remove('fading');
@@ -1819,6 +1879,14 @@ document.getElementById('modal-overlay').addEventListener('click', function(e) {
 });
 
 /* ═══════════════════════════════════════════════════════════════
+   PAGE NAVIGATION
+═══════════════════════════════════════════════════════════════ */
+function switchPage(page) {
+  document.querySelectorAll('.page-tab').forEach(t => t.classList.toggle('active', t.dataset.page === page));
+  document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.id === `page-${page}`));
+}
+
+/* ═══════════════════════════════════════════════════════════════
    AUTO-REFRESH
 ═══════════════════════════════════════════════════════════════ */
 function startAutoRefresh() {
@@ -1874,7 +1942,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     resizeTimer = setTimeout(() => {
       if (STATE.chartInst) {
         const wrap = document.getElementById('rrg-wrap');
-        const size = Math.min(wrap.clientWidth, wrap.clientHeight - 10);
+        const size = Math.min(wrap.clientWidth - 4, wrap.clientHeight - 4);
         const canvas = document.getElementById('rrg-chart');
         canvas.style.width  = size + 'px';
         canvas.style.height = size + 'px';
